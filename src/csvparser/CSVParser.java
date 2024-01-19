@@ -5,6 +5,7 @@
  */
 package csvparser;
 
+import java.awt.FileDialog;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -14,10 +15,10 @@ import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
-import javax.swing.JFileChooser;
+import javax.swing.JFrame;
 import javax.swing.JOptionPane;
-import javax.swing.filechooser.FileNameExtensionFilter;
 
 
 /**
@@ -29,19 +30,24 @@ public class CSVParser {
     static final int VARIANT_INDEX = 19;
     static final int QUANTITY_INDEX = 22;
     static final int OPTIONS_INDEX = 28;
+    
+    public int maxOptions = 4;
 
     /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        JFileChooser fc = new JFileChooser();
-        FileNameExtensionFilter filter = new FileNameExtensionFilter("CSV", "csv");
-        fc.setFileFilter(filter);
-        int returnVal = fc.showOpenDialog(null);
-        CSVParser parser;
+        JFrame frame = new JFrame();
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        FileDialog fd = new FileDialog(frame, "Choose a report", FileDialog.LOAD);
+        fd.setFilenameFilter((File dir, String name) -> name.endsWith(".csv"));
+        fd.setVisible(true);
+        
+        File[] selected = fd.getFiles();
+
         String completeMessage = "Complete";
-        if (returnVal == JFileChooser.APPROVE_OPTION && fc.getSelectedFile().exists()){
-            parser = new CSVParser(fc.getSelectedFile());
+        if (selected.length != 0){
+            CSVParser parser = new CSVParser(selected[0]);
             try{
                 parser.readFile();
                 parser.sortArray();
@@ -52,7 +58,9 @@ public class CSVParser {
             }
         }
         JOptionPane popup = new JOptionPane();
-        popup.showMessageDialog(null,completeMessage);
+        popup.showMessageDialog(null, completeMessage);
+        
+        System.exit(0);
     }
     
     public CSVParser(File file){
@@ -76,13 +84,19 @@ public class CSVParser {
             if (attributes.length != 0){
                 int quantity = Integer.parseInt(attributes[QUANTITY_INDEX].trim());
                 if (!attributes[TITLE_INDEX].contains("Kit")){
-                    addToList(new Item(attributes[TITLE_INDEX].trim(),attributes[VARIANT_INDEX].trim(),quantity));
+                    ArrayList<String> options = new ArrayList<String>(Arrays.asList(attributes[VARIANT_INDEX].trim()));
+                    for (int i = OPTIONS_INDEX; i < attributes.length; i++){
+                        if (!attributes[i].trim().isEmpty()){
+                            options.add(attributes[i].trim());
+                        }
+                    }
+                    addToList(new Item(attributes[TITLE_INDEX].trim(), options.toArray(new String[options.size()]), quantity));
                 } else{
                     for (int i = OPTIONS_INDEX; i < attributes.length; i++){
                         if (attributes[i].trim().compareTo("") != 0
                                 && !attributes[i].trim().contains("DO NOT WANT THIS")){
                             String name = kitItems.get(i - 28);
-                            addToList(new Item(name,attributes[i].trim(),1));
+                            addToList(new Item(name, new String[]{attributes[i].trim()}, 1));
                         }
                     }
                 }
@@ -134,7 +148,11 @@ public class CSVParser {
         File outFile = new File(desktopLoc + outName);
         outFile.createNewFile();
         PrintWriter out = new PrintWriter(outFile);
-        out.println("Quantity,Item Name,Size,Opt 1,Opt 2,Opt 3,Opt 4");
+        String headerString = "Quantity,Item Name,Size";
+        for (int i = 1; i <= maxOptions; i++){
+            headerString += ",Opt " + String.valueOf(i);
+        }
+        out.println(headerString);
         for (Item item : items){
             out.println(item.toCSVString());
         }
@@ -153,10 +171,15 @@ public class CSVParser {
         ArrayList<String> options = new ArrayList<>();
         int quantity;
         
-        public Item(String name, String lineItem, int quantity) {
+        public Item(String name, String[] lineItemOptions, int quantity) {
             this.name = name;
             this.quantity = quantity;
-            String[] details = lineItem.split("/");
+            ArrayList<String> details = new ArrayList<String>();
+            for (String options : lineItemOptions){
+                for (String splitOption : options.split("/")){
+                    details.add(splitOption.trim());
+                }
+            }
             for (String detail : details){
                 if (detail.trim().matches(sizeRegex)){
                     size = findSize(detail.trim());
@@ -169,6 +192,9 @@ public class CSVParser {
                 } else{
                     options.add(detail.trim());
                 }
+            }
+            if (options.size() > maxOptions){
+                maxOptions = options.size();
             }
         }
         
